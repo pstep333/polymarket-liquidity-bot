@@ -3,14 +3,10 @@ import pandas as pd
 from datetime import datetime
 from py_clob_client.order_builder.constants import BUY, SELL
 from py_clob_client.client import ClobClient, OrderArgs, OpenOrderParams
+from variables import host, key, chain_id, funder, ids
 
 
 def init_client():
-    chain_id = 137
-    host = 'https://clob.polymarket.com'
-    key = '' # private key
-    funder = '' # public address
-
     client = ClobClient(host=host, key=key, chain_id=chain_id, signature_type=1, funder=funder)
     client.set_api_creds(client.create_or_derive_api_creds())
     return client
@@ -131,6 +127,15 @@ def cancel_all_orders(client) -> bool:
     except Exception as e:
         print(f"Error cancelling all orders: {e}")
     return False
+
+
+def return_markets(client, ids):
+    markets = []
+    for id in ids:
+        token_1, token_2 = get_tokens(client=client, condition_id=id)
+        market = {'condition_id': id, 'token_1': token_1, 'token_2': token_2}
+        markets.append(market)
+    return markets
 
 
 def main():

@@ -4,7 +4,8 @@ import websockets
 import pandas as pd
 
 from multiprocessing import Process, Event
-from polymarket import init_client, get_orders, place_order, cancel_order, cancel_all_orders, get_tokens
+from support.variables import ids
+from support.polymarket import init_client, get_orders, place_order, cancel_order, cancel_all_orders, return_markets
 
 
 URL = 'wss://ws-subscriptions-clob.polymarket.com/ws/market'
@@ -12,25 +13,24 @@ processes = []
 stop_event = Event()
 
 
-def return_markets(client):
-    ids = ['0x4e0f29885709d63bfcff29e80f4a8df1da9e97906ba9e21577b46a70858d8e06', # no change fed
-           '0xf48f79d8e60ab1efa76e53bec8c005611bfdc097cc0e51dc2f612709c04f5acf', # 25 bps
-           '0x83cbe2163655a7b55283f92cc0d1f70538408e27dca50657744362b802eb57e5', # super heavy explodes
-           '0xef5604329fee713a68f4faa9d3014614c7486525864a11f2ebb054179a0c362e', # no change fed
-           '0xeed6da09683149b433aeb802bd8d3f78a6b6d8799fa75bd0d73c3f87c6b2b592', # 25 bps
-           '0x6e9fda006161184b29a2df3754b5b9c3757f8a2adc1f44291fe9907f8fc6ae97', # jurassic world 
-           '0x8b983af0d3bb4339f809efb01439cf825331c02522c2c70c1b53f13ea4a5432d', # nickel boys
-           '0x2e87bcd620d1c9f16f82e19f626f39047cbf152018461cb7146df27d981cbf1f', # brat
-           '0xc53769f49bdd1e16177f64d42967b0ab2344ecc2945da88d1a67bc8771c31a1a', # tortured poet
-           '0x4b4d70030f24d4eae335226191ac7fbfd93f1a45f0b1b57b639015b14625b54d'  # cowboy carter
-          ]
-    
-    markets = []
-    for id in ids:
-        token_1, token_2 = get_tokens(client=client, condition_id=id)
-        market = {'condition_id': id, 'token_1': token_1, 'token_2': token_2}
-        markets.append(market)
-    return markets
+# adjust order amounts as wanted
+def logic(bids, lowest_bid):
+    if bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 75:
+        amount = 0
+        lowest_bid = 0
+    elif bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 100:
+        amount = 10
+    elif bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 150:
+        amount = 20
+    elif bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 225:
+        amount = 25
+    elif bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 450:
+        amount = 35
+    elif bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 700:
+        amount = 50
+    else:
+        amount = 75
+    return amount, lowest_bid
 
 
 def check_book(max_spread, spread, bids_df, order_size, min_tick_size):
@@ -73,24 +73,7 @@ def check_book(max_spread, spread, bids_df, order_size, min_tick_size):
     if lowest_bid != 0:
         bids_above_size = bids_df[round(bids_df['price'], 3) > lowest_bid]['size'].sum()
 
-    # adjust amounts as wanted
-    if bids_df[round(bids_df['price'], 3) > lowest_bid]['amount'].sum() <= 75:
-        amount = 0
-        lowest_bid = 0
-    elif bids_df[round(bids_df['price'], 3) > lowest_bid]['amount'].sum() <= 100:
-        amount = 10
-    elif bids_df[round(bids_df['price'], 3) > lowest_bid]['amount'].sum() <= 150:
-        amount = 20
-    elif bids_df[round(bids_df['price'], 3) > lowest_bid]['amount'].sum() <= 225:
-        amount = 25
-    elif bids_df[round(bids_df['price'], 3) > lowest_bid]['amount'].sum() <= 450:
-        amount = 35
-    elif bids_df[round(bids_df['price'], 3) > lowest_bid]['amount'].sum() <= 700:
-        amount = 50
-    else:
-        amount = 58
-    '''elif bids_df[round(bids_df['price'], 3) > lowest_bid]['amount'].sum() <= 1000:
-        amount = 70'''
+    amount, lowest_bid = logic(bids_df, lowest_bid)
     
     # print(f'lowest_bid: {lowest_bid}, midpoint: {midpoint}, amount: {amount}, bid_lvls: {bid_lvls}, actual: {round(relevant_bids.loc[1, "price"], 3)}, \nrelevant_bids: {relevant_bids}')
     return lowest_bid, bids_above_size, amount, midpoint
@@ -277,8 +260,7 @@ def process(client, market, min_size, daily_rate, max_spread, min_tick_size):
 
 def main():
     client = init_client()
-    markets = return_markets(client=client)
-
+    markets = return_markets(client, ids)
     for i, market in enumerate(markets):
         condition_id = market['condition_id']
         token_1 = market['token_1']

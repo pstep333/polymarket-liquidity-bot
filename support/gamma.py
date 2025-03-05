@@ -113,13 +113,8 @@ def return_event_condition_id(events_ids, binary_only=True):
 
 
 def main():
-    sorted_events = return_latest_events()
-    print(sorted_events.iloc[0]['markets'])
-    last_events_ids = sorted_events['id'].head(10)
-    condition_ids = return_event_condition_id(last_events_ids, binary_only=False)
-    return condition_ids
-    
+    return 0
+
 
 if __name__ == '__main__':
-    ids = main()
-    print(ids)
+    main()
