@@ -60,9 +60,12 @@ def main():
     client.set_api_creds(client.create_or_derive_api_creds())
     df = get_markets(client)
 
+    keyw1 = input("Type first keyword and press enter\n")
+    keyw2 = input("Type second keyword and press enter\n")
+    
     # use to get ids of desired markets
-    for i, row in df.iterrows():
-        if ('cowboy' in row['question'].lower()) & ('' in row['question'].lower()):
+    for _, row in df.iterrows():
+        if (keyw1.lower() in row['question'].lower()) & (keyw2.lower() in row['question'].lower()):
             print(row['question'])
             print(row['first_price'])
             print(row['condition_id'])
