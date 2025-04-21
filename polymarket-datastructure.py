@@ -2,10 +2,15 @@ import json, time, math
 import asyncio
 import websockets
 import pandas as pd
+from py_clob_client.clob_types import TradeParams
+
 
 from multiprocessing import Process, Event
 # from support.variables import ids
-from support.polymarket import ids, init_client, get_orders, place_order, cancel_order, cancel_all_orders, return_markets
+from support.polymarket import init_client, get_orders, place_order, cancel_order, cancel_all_orders, return_markets
+
+ids = ['0x7a18e4d613d7bf6afa06aa9eb1f9287ca81e841d77ae6d5fabdab37f0c0b5d6c' # will-bitcoin-reach-100k-in-april
+       ]
 
 
 URL = 'wss://ws-subscriptions-clob.polymarket.com/ws/market'
@@ -13,27 +18,23 @@ processes = []
 stop_event = Event()
 
 
-# Adjust order amounts as wanted. Comparing the number of bids above the lowest bids (eg. 100 upwards)
+# Adjust order amounts as wanted. Comparing the number of bids above the lowest bids (eg. 75 - 700)
 def logic(bids, lowest_bid):
-    if bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 100:
+    if bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 75:
         amount = 0
         lowest_bid = 0
-    elif bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 300:
-        amount = 45
-    elif bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 600:
-        amount = 90
-    elif bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 900:
-        amount = 120
-    elif bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 1200:
+    elif bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 100:
+        amount = 30
+    elif bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 150:
+        amount = 60
+    elif bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 225:
+        amount = 75
+    elif bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 450:
+        amount = 105
+    elif bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 700:
         amount = 150
-    elif bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 1500:
-        amount = 200
-    elif bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 2000:
-        amount = 300
-    elif bids[round(bids['price'], 3) > lowest_bid]['amount'].sum() <= 3000:
-        amount = 400
     else:
-        amount = 600
+        amount = 175
     return amount, lowest_bid
 
 
@@ -59,7 +60,6 @@ def check_book(max_spread, spread, bids_df, order_size, min_tick_size):
     elif bid_lvls > 6: lowest_bid = round(relevant_bids.loc[6, 'price'], 4)
     elif bid_lvls > 4: lowest_bid = round(relevant_bids.loc[4, 'price'], 4)
     elif bid_lvls > 2: lowest_bid = round(relevant_bids.loc[len(relevant_bids) - 1, 'price'], 4)
-    else: lowest_bid = 0 # don't bid if there are only 2 levels?
 
     if min_tick_size == 0.001:
         if bid_lvls <= 4: lowest_bid = 0
@@ -82,7 +82,7 @@ def check_book(max_spread, spread, bids_df, order_size, min_tick_size):
 
     amount, lowest_bid = logic(bids_df, lowest_bid)
     
-    # print(f'lowest_bid: {lowest_bid}, midpoint: {midpoint}, amount: {amount}, bid_lvls: {bid_lvls}, actual: {round(relevant_bids.loc[1, "price"], 3)}, \nrelevant_bids: {relevant_bids}')
+    print(f'min_tick_size: {min_tick_size}, lowest_bid: {lowest_bid}, midpoint: {midpoint}, amount: {amount}, bid_lvls: {bid_lvls}, actual: {round(relevant_bids.loc[1, "price"], 3)}, \nrelevant_bids: {relevant_bids}')
     return lowest_bid, bids_above_size, amount, midpoint
 
 
@@ -167,24 +167,30 @@ async def handle_market(client, market, min_size, daily_rate, max_spread, min_ti
 
                 async for msg in websocket:
                     data = json.loads(msg)
+                 
                     data = return_data(data)
+
                     if data['event_type'] == 'book':
                         bids, spread, token_to_use = parse_orderbook(data=data, 
                                                             token_1=token_1, 
                                                             token_2=token_2)
+                                                               
                         lowest_bid, bids_above_size, amount, midpoint = check_book(max_spread=max_spread, 
                                                                                 spread=spread,
                                                                                 bids_df=bids, 
                                                                                 order_size=order_size,
                                                                                 min_tick_size=min_tick_size)
-                        # print(f'Evaluating Market ({condition_id[:5]}): Daily_rate: {daily_rate}, Lowest_bid: {lowest_bid}, Midpoint: {midpoint}, Amount: {amount}, Bids_above_size: {bids_above_size}')
+                        
+                        
+                        print(f'Daily_rate: {daily_rate}, Lowest_bid: {lowest_bid}, Midpoint: {midpoint}, Amount: {amount}, Bids_above_size: {bids_above_size}')
+                        
                         temp_midpoint = midpoint
                         temp_token = token_to_use
                         if daily_rate != 0:
                             if lowest_bid > 0:
                                 diff = amount - (min_size * lowest_bid)
                                 size = min_size + round(math.floor(diff / lowest_bid), 1) if diff >= 0 else 0 # Calculating the number of tokens to buy
-                                if (1.5*size > bids_above_size) | (diff < 0): # dont place order / cancel if volume above order too low
+                                if (1.5*size > bids_above_size) | (diff < 0): # Don't place order / cancel if volume above order too low
                                     lowest_bid = 0
 
                             if buy_flag == 0: # No open buy order, place an order if lowest_bid > 0
@@ -197,30 +203,11 @@ async def handle_market(client, market, min_size, daily_rate, max_spread, min_ti
                                                             token_id=token_to_use,
                                                             condition_id=condition_id)
                             elif buy_flag == 1:
-                                # print (f'Re-evaluting Token: {str(open_orders[0]['token_id'])[:5]}')
+                                print (f'Re-evaluting Token: {open_orders[0].token_id[:5]}')
                                 order_size = open_orders[0]['size']
                                 order_amount = order_size * open_orders[0]['price']
-                                
                                 if open_orders[0]['side'].lower() == 'buy':
-                                    # Cancel order if price or size changed
-                                    # Evaluate each condition separately
-                                    price_change = open_orders[0]['price'] != lowest_bid
-                                    too_little_size = order_amount < 0.85 * amount
-                                    too_much_size = order_amount > 1.1 * amount
-
-                                    # Print which conditions are true
-                                    # print(f"Price Change: {price_change}, Too Little Size: {too_little_size}, Too Much Size: {too_much_size}")
-
-                                    # Use the conditions in the if statement
-                                    if price_change or too_little_size or too_much_size:
-                                        # Print only the conditions that are true
-                                        if price_change:
-                                            print(f"Condition Triggered ({str(open_orders[0]['token_id'])[:5]}): Price Change")
-                                        if too_little_size:
-                                            print(f"Condition Triggered ({str(open_orders[0]['token_id'])[:5]}): Too Little Size")
-                                        if too_much_size:
-                                            print(f"Condition Triggered ({str(open_orders[0]['token_id'])[:5]}): Too Much Size")
-
+                                    if (open_orders[0]['price'] != lowest_bid) | ((order_amount < 0.9*amount) | (order_amount > 1.05*amount)): # Cancel order if price or size changed
                                         await asyncio.to_thread(cancel_order,
                                                                 client=client,
                                                                 order_id=open_orders[0]['id'])
@@ -289,6 +276,10 @@ def process(client, market, min_size, daily_rate, max_spread, min_tick_size):
 def main():
     client = init_client()
     markets = return_markets(client, ids)
+    
+
+    
+    
     for i, market in enumerate(markets):
         condition_id = market['condition_id']
         token_1 = market['token_1']

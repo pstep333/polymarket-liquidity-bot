@@ -1,8 +1,16 @@
+from dotenv import load_dotenv
+import os
+from eth_account import Account
+
+# Load environment variables from .env
+load_dotenv()
+
+key = os.getenv("PRIVATE_KEY")
+funder = Account.from_key(key)
+
 chain_id = 137
 host = 'https://clob.polymarket.com'
-key = '' # private key
-funder = '' # public address
 
-ids = ['0x4e0f29885709d63bfcff29e80f4a8df1da9e97906ba9e21577b46a70858d8e06', # no change fed
-       '0xf48f79d8e60ab1efa76e53bec8c005611bfdc097cc0e51dc2f612709c04f5acf' # 25 bps
+ids = ['0xfc4c7a2af57acbbd42223ea7d6472aae124d73166b3b631ff9981496a2fe42d9', # Will the price of Ethereum be between $1600 and $1700 on Apr 25?
+       '0xd89059ab7874993719630031e34f055ca68236eb9b82aed815fd42dc50d3638d' # Will the price of Ethereum be between $1500 and $1600 on Apr 25?
       ]

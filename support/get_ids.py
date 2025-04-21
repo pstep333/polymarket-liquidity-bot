@@ -56,7 +56,7 @@ def get_markets(client):
 
 
 def main():
-    client = ClobClient(host=host, key=key, chain_id=chain_id, signature_type=1, funder=funder)
+    client = ClobClient(host=host, key=key, chain_id=chain_id)
     client.set_api_creds(client.create_or_derive_api_creds())
     df = get_markets(client)
 
